@@ -11,6 +11,7 @@ from gwemlightcurves import lightcurve_utils, Global
 
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF, Matern, DotProduct, ConstantKernel, RationalQuadratic
+import pickle
 
 try:
     import torch
@@ -81,7 +82,7 @@ def calc_svd_lbol(tini,tmax,dt, n_coeff = 100, model = "BaKa2016",
 
 
     filenames = glob.glob('%s/*_Lbol.dat'%fileDir)
-
+    print(fileDir)
     lbols, names = lightcurve_utils.read_files_lbol(filenames)
     lbolkeys = lbols.keys()
 
@@ -239,6 +240,7 @@ def calc_svd_lbol(tini,tmax,dt, n_coeff = 100, model = "BaKa2016",
 
     lbol_array = []
     param_array = []
+    print(lbolkeys)
     for key in lbolkeys:
         lbol_array.append(lbols[key]["Lbol"])
         if model == "BaKa2016":
@@ -252,6 +254,7 @@ def calc_svd_lbol(tini,tmax,dt, n_coeff = 100, model = "BaKa2016",
         elif model == "Bu2019inc":
             param_array.append([np.log10(lbols[key]["mej"]),lbols[key]["phi"],lbols[key]["theta"]])
         elif model in ["Bu2019lf","Bu2019lr","Bu2019lm"]:
+            print('Hoo')
             param_array.append([np.log10(lbols[key]["mej_dyn"]),np.log10(lbols[key]["mej_wind"]),lbols[key]["phi"],lbols[key]["theta"]])
         elif model in ["Bu2019nsbh"]:
             param_array.append([np.log10(lbols[key]["mej_dyn"]),np.log10(lbols[key]["mej_wind"]),lbols[key]["theta"]])
@@ -431,8 +434,9 @@ def calc_svd_mag(tini,tmax,dt, n_coeff = 100, model = "BaKa2016",
     magkeys = mags.keys()
 
     tt = np.arange(tini,tmax+dt,dt)
-    filters = ["u","g","r","i","z","y","J","H","K"]
+    #filters = ["u","g","r","i","z","y","J","H","K"]
 
+    filters = ["g","r","J"]
     for jj, key in enumerate(magkeys):
         print('Setup %s: %d/%d' % (key, jj, len(magkeys)+1))
         
@@ -727,7 +731,7 @@ def calc_svd_mag(tini,tmax,dt, n_coeff = 100, model = "BaKa2016",
                     optimizer.step()
 
                 gps.append(model.state_dict())
-
+        
         svd_model[filt] = {}
         svd_model[filt]["n_coeff"] = n_coeff
         svd_model[filt]["param_array"] = param_array
@@ -741,7 +745,24 @@ def calc_svd_mag(tini,tmax,dt, n_coeff = 100, model = "BaKa2016",
         svd_model[filt]["maxs"] = maxs
         svd_model[filt]["gps"] = gps
         svd_model[filt]["tt"] = tt
+        
 
+        svd_model_filt = {}
+        svd_model_filt["n_coeff"] = n_coeff
+        svd_model_filt["param_array"] = param_array
+        svd_model_filt["param_array_postprocess"] = param_array_postprocess
+        svd_model_filt["cAmat"] = cAmat
+        svd_model_filt["cAstd"] = cAstd
+        svd_model_filt["VA"] = VA
+        svd_model_filt["param_mins"] = param_mins
+        svd_model_filt["param_maxs"] = param_maxs
+        svd_model_filt["mins"] = mins
+        svd_model_filt["maxs"] = maxs
+        svd_model_filt["gps"] = gps
+        svd_model_filt["tt"] = tt
+
+        with open('%s_%s_mag.pkl'%(model,filt),'wb') as pklfile:
+            pickle.dump(svd_model_filt,pklfile)
     print("Finished calculating SVD model of lightcurve magnitudes...")
 
     return svd_model
@@ -1035,7 +1056,7 @@ def calc_color(tini,tmax,dt,param_list,svd_mag_color_model=None, model = "a2.0")
 
 
 def calc_lc(tini,tmax,dt,param_list,svd_mag_model=None,svd_lbol_model=None,
-            model = "BaKa2016", gptype="sklearn", n_coeff_lim=None,filterlist=None):
+            model = "BaKa2016", gptype="sklearn", n_coeff_lim=None):
 
     tt = np.arange(tini,tmax+dt,dt)
 
@@ -1044,12 +1065,8 @@ def calc_lc(tini,tmax,dt,param_list,svd_mag_model=None,svd_lbol_model=None,
     if svd_lbol_model == None:
         svd_lbol_model = calc_svd_lbol(tini,tmax,dt,model=model)
 
-    if filterlist==None:
-        #filters = ["u","g","r","i","z","y","J","H","K"]
-        filters = ["g","r","J"]
-    else:
-        filters = filterlist
-    print('Using filters',filters)
+    #filters = ["u","g","r","i","z","y","J","H","K"]
+    filters = ["g"]#,"r","J"]
     mAB = np.zeros((9,len(tt)))
     for jj,filt in enumerate(filters):
         print('Doing filter',filt)
@@ -1078,8 +1095,8 @@ def calc_lc(tini,tmax,dt,param_list,svd_mag_model=None,svd_lbol_model=None,
         cAproj = np.zeros((n_coeff,))
         cAstd = np.zeros((n_coeff,))
         for i in range(n_coeff):
-            print('Doing',i,n_coeff)
             gp = gps[i]
+            print('Doing',i,n_coeff)
             if gptype == "sklearn":
                 y_pred, sigma2_pred = gp.predict(np.atleast_2d(param_list_postprocess), return_std=True)
                 cAproj[i] = y_pred
@@ -1140,8 +1157,8 @@ def calc_lc(tini,tmax,dt,param_list,svd_mag_model=None,svd_lbol_model=None,
 
     cAproj = np.zeros((n_coeff,))
     for i in range(n_coeff):
-        gp = gps[i]
         print('Now doing',i,n_coeff)
+        gp = gps[i]
         if gptype == "sklearn":
             y_pred, sigma2_pred = gp.predict(np.atleast_2d(param_list_postprocess), return_std=True)
             cAproj[i] = y_pred

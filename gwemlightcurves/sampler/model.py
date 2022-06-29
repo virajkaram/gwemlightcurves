@@ -14,11 +14,6 @@ def generate_lightcurve(model,samples):
 
     if Global.n_coeff > 0:
         samples["n_coeff"] = Global.n_coeff
-    try:
-        samples["gptype"] = Global.gptype
-    except:
-        pass
-
     model_table = KNTable.model(model, samples)
 
     if len(model_table) == 0:
@@ -666,27 +661,6 @@ def Bu2019lm_model_ejecta(mej_dyn,mej_wind,phi,theta):
     samples['theta'] = theta
 
     model = "Bu2019lm"
-    t, lbol, mag = generate_lightcurve(model,samples)
-
-    return t, lbol, mag
-
-def Bu2021ka_model_ejecta(mej_dyn,mej_wind,phi,theta,kappa):
-
-    tini = 0.1
-    tmax = 50.0
-    dt = 0.1
-
-    samples = {}
-    samples['tini'] = tini
-    samples['tmax'] = tmax
-    samples['dt'] = dt
-    samples['mej_dyn'] = mej_dyn
-    samples['mej_wind'] = mej_wind
-    samples['phi'] = phi
-    samples['theta'] = theta
-    samples['kappa'] = kappa
-
-    model = "Bu2021ka"
     t, lbol, mag = generate_lightcurve(model,samples)
 
     return t, lbol, mag

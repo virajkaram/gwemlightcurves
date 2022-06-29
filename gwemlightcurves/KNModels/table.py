@@ -190,17 +190,22 @@ def get_eos_list(TOV):
                          'calculate the radius.')
     try:
         path = find_executable('ap4_mr.dat')
+        #path = '/scr2/viraj/gwemlightcurves/input/Monica/ap4_mr.dat'
+        #path = '/Users/viraj/gwemlightcurves/input/Monica/ap4_mr.dat'
         path = path[:-10]
+        print(path)
     except:
        raise ValueError('Check to make sure EOS mass-radius '
                         'tables have been installed correctly '
                         '(try `which ap4_mr.dat`)')
     if TOV == 'Monica':
         EOS_List=[file_name[:-7] for file_name in os.listdir(path) if file_name.endswith("_mr.dat") and 'lalsim' not in file_name]
+        print('EOS list 1: ',EOS_List)
     if TOV == 'Wolfgang':
         EOS_List=[file_name[:-10] for file_name in os.listdir(path) if file_name.endswith("seq")]
     if TOV == 'lalsim':
         EOS_List=[file_name[:-14] for file_name in os.listdir(path) if file_name.endswith("lalsim_mr.dat")]
+    print('EOS list again: ',EOS_List)
     return EOS_List
 
 def construct_eos_from_polytrope(eos_name):
@@ -302,8 +307,8 @@ class KNTable(Table):
             samples_out = samples_out['lalinference']
 
             data_out = Table(samples_out)
-            data_out['q'] = data_out['m1_source'] / data_out['m2_source']
-            data_out['mchirp'] = (data_out['m1_source'] * data_out['m2_source'])**(3./5.) / (data_out['m1_source'] + data_out['m2_source'])**(1./5.)
+            data_out['q'] = data_out['m1'] / data_out['m2']
+            data_out['mchirp'] = (data_out['m1'] * data_out['m2'])**(3./5.) / (data_out['m1'] + data_out['m2'])**(1./5.)
             
             data_out['theta'] = data_out['iota']
             idx = np.where(data_out['theta'] > 90.)[0]
@@ -707,7 +712,7 @@ class KNTable(Table):
             if (self['c2'] < 0.).any():
                 print("Warning: Returned compactnesses < 0 ... setting = 0.")
                 self['c2'][self['c2'] < 0.0] = 0.0
-        return self
+            return self
 
 
 
@@ -737,6 +742,7 @@ class KNTable(Table):
         if TOV == 'Monica':
             import gwemlightcurves.EOS.TOV.Monica.MonotonicSpline as ms
             import gwemlightcurves.EOS.TOV.Monica.eos_tools as et
+            print('Path',find_executable(EOS + '_mr.dat'))
             MassRadiusBaryMassTable = Table.read(find_executable(EOS + '_mr.dat'), format='ascii')
             baryonic_mass_of_mass_const = ms.interpolate(MassRadiusBaryMassTable['mass'], MassRadiusBaryMassTable['mb'])
             # after obtaining the baryonic_mass_of_mass constants we now can either take values directly from table or use pre calculated spline to extrapolate the values
@@ -775,6 +781,7 @@ class KNTable(Table):
 
             import gwemlightcurves.EOS.TOV.Monica.MonotonicSpline as ms
             import gwemlightcurves.EOS.TOV.Monica.eos_tools as et
+            print(find_executable(EOS + '_mr.dat'))
             MassRadiusBaryMassTable = Table.read(find_executable(EOS + '_mr.dat'), format='ascii')
             radius_of_mass_const = ms.interpolate(MassRadiusBaryMassTable['mass'], MassRadiusBaryMassTable['radius'])
             # after obtaining the radius_of_mass constants we now can either take values directly from table or use pre calculated spline to extrapolate the values
