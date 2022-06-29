@@ -678,7 +678,6 @@ def multinest(opts,plotDir):
             zp_mu, zp_std = 0.0, Global.ZPRange
             zp_best = scipy.stats.norm(zp_mu, zp_std).ppf(zp_best)
             tmag, lbol, mag = Bu2021ka_model_ejecta(mej_dyn_best,mej_wind_best,phi_best,theta_best, kappa_best)
-
     elif opts.model in ["Bu2019lw"]:
         if opts.doEjecta:
             t0, mej_wind, phi, theta, zp, loglikelihood = data[:,0], 10**data[:,1], data[:,2], data[:,3], data[:,4], data[:,5]

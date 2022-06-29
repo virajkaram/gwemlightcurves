@@ -421,7 +421,7 @@ def myprior_Bu2019lm_ejecta(cube, ndim, nparams):
 
 def myprior_Bu2021ka_ejecta(cube, ndim, nparams):
         cube[0] = cube[0]*2*Global.T0Range - Global.T0Range
-        #cube[1] = cube[1]*5.0 - 5.0 
+        #cube[1] = cube[1]*5.0 - 5.0
         if not Global.mdyn==-1:
             cube[1] = np.log10(cube[1]*0.0002 + Global.mdyn - 0.0001)
         else:

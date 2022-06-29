@@ -324,6 +324,7 @@ def calc_lc(tini,tmax,dt,mej,vej,beta,kappa_r):
 
     return tdays, Ltotm*1e40, mAB, Tobs
 
+
 def calc_lc_UV(tini, tmax, dt, mej, vej, beta, kappa_r):
 
     # ** define constants **

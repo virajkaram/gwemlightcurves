@@ -1,10 +1,7 @@
 # https://arxiv.org/abs/1705.07084
 
 import os, sys, glob
-import json
 import numpy as np
-seed = 0
-random_state = np.random.RandomState(seed)
 import scipy.interpolate
 from scipy.interpolate import interpolate as interp
 from scipy.interpolate import griddata
@@ -14,7 +11,7 @@ from gwemlightcurves import lightcurve_utils, Global
 
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF, Matern, DotProduct, ConstantKernel, RationalQuadratic
-from sklearn.model_selection import train_test_split
+import pickle
 
 try:
     import torch
@@ -36,19 +33,6 @@ except:
 
 #import george
 #from george import kernels
-try:
-    from gp_api.gaussian_process import GaussianProcess
-    from gp_api.kernels import CompactKernel, WhiteNoiseKernel
-except:
-    print('Install gp_api if you want to use it...')
-
-try:
-    import tensorflow as tf
-    tf.get_logger().setLevel('ERROR')
-    from tensorflow.keras import Sequential
-    from tensorflow.keras.layers import Dense
-except:
-    print('Install tensorflow if you want to use it...')
 
 def calc_svd_lbol(tini,tmax,dt, n_coeff = 100, model = "BaKa2016",
                   gptype="sklearn"):
@@ -91,8 +75,6 @@ def calc_svd_lbol(tini,tmax,dt, n_coeff = 100, model = "BaKa2016",
         fileDir = "../output/bulla_reprocess_decimated"
     elif model == "Bu2019nsbh":
         fileDir = "../output/bulla_2Component_lnsbh"
-    elif model == "Bu2021ka":
-        fileDir = "../output/bulla_2Comp_kappas"
     elif model == "Wo2020dyn":
         fileDir = "../output/bulla_rosswog_dynamical"
     elif model == "Wo2020dw":
@@ -100,7 +82,7 @@ def calc_svd_lbol(tini,tmax,dt, n_coeff = 100, model = "BaKa2016",
 
 
     filenames = glob.glob('%s/*_Lbol.dat'%fileDir)
-
+    print(fileDir)
     lbols, names = lightcurve_utils.read_files_lbol(filenames)
     lbolkeys = lbols.keys()
 
@@ -145,20 +127,6 @@ def calc_svd_lbol(tini,tmax,dt, n_coeff = 100, model = "BaKa2016",
             lbols[key]["kappaLR"] = kappaLR
             lbols[key]["gammaLR"] = gammaLR
             lbols[key]["theta"] = theta
-
-        elif "scalekappa" in key:
-
-            mejdyn = float(keySplit[1].replace("mejdyn",""))
-            mejwind = float(keySplit[2].replace("mejwind",""))
-            phi0 = float(keySplit[3].replace("phi",""))
-            kappa = float(keySplit[4].replace("scalekappa",""))
-            theta = float(keySplit[5])
-
-            lbols[key]["mej_dyn"] = mejdyn
-            lbols[key]["mej_wind"] = mejwind
-            lbols[key]["phi"] = phi0
-            lbols[key]["theta"] = theta
-            lbols[key]["kappa"] = kappa
 
         elif "nsns" in key:
 
@@ -272,6 +240,7 @@ def calc_svd_lbol(tini,tmax,dt, n_coeff = 100, model = "BaKa2016",
 
     lbol_array = []
     param_array = []
+    print(lbolkeys)
     for key in lbolkeys:
         lbol_array.append(lbols[key]["Lbol"])
         if model == "BaKa2016":
@@ -285,9 +254,8 @@ def calc_svd_lbol(tini,tmax,dt, n_coeff = 100, model = "BaKa2016",
         elif model == "Bu2019inc":
             param_array.append([np.log10(lbols[key]["mej"]),lbols[key]["phi"],lbols[key]["theta"]])
         elif model in ["Bu2019lf","Bu2019lr","Bu2019lm"]:
+            print('Hoo')
             param_array.append([np.log10(lbols[key]["mej_dyn"]),np.log10(lbols[key]["mej_wind"]),lbols[key]["phi"],lbols[key]["theta"]])
-        elif model in ["Bu2021ka"]:
-            param_array.append([np.log10(lbols[key]["mej_dyn"]),np.log10(lbols[key]["mej_wind"]),lbols[key]["phi"],lbols[key]["theta"],lbols[key]["kappa"]])
         elif model in ["Bu2019nsbh"]:
             param_array.append([np.log10(lbols[key]["mej_dyn"]),np.log10(lbols[key]["mej_wind"]),lbols[key]["theta"]])
         elif model in ["Bu2019lw"]:
@@ -335,8 +303,6 @@ def calc_svd_lbol(tini,tmax,dt, n_coeff = 100, model = "BaKa2016",
     cAstd = np.sqrt(cAvar)
 
     nsvds, nparams = param_array_postprocess.shape
-    gps = []
-
     if gptype == "sklearn":
         kernel = 1.0 * RationalQuadratic(length_scale=1.0, alpha=0.1)
         gps = []
@@ -344,56 +310,6 @@ def calc_svd_lbol(tini,tmax,dt, n_coeff = 100, model = "BaKa2016",
             gp = GaussianProcessRegressor(kernel=kernel,n_restarts_optimizer=0)
             gp.fit(param_array_postprocess, cAmat[i,:])
             gps.append(gp)
-    elif gptype == "gp_api":
-        nd = 1
-        # Construct hyperparamters
-        coeffs = [0.5] * nd
-        whitenoise = 0.5
-
-        # Create the compact kernel
-        k1 = CompactKernel.fit(param_array_postprocess, method="simple", coeffs=coeffs, sparse=True)
-
-        # Create the whitenoise kernel
-        k2 = WhiteNoiseKernel.fit(param_array_postprocess, method = "simple", scale = whitenoise, sparse = True)
-
-        # Add them together
-        kernel = k1 # + k2
-
-        for i in range(n_coeff):
-            # Fit the training data
-            gp = GaussianProcess.fit(param_array_postprocess, cAmat[i,:], kernel=kernel, train_err=1e-2)
-            store = gp.store_options
-
-            gp_dict = {}
-            if gp.param_names is not None:
-                gp_dict["param_names"] = ",".join(gp.param_names)
-            else:
-                gp_dict["param_names"] = None
-
-            # Save the kernel
-            gp_dict["kernel"] = gp.kernel.to_json()
-
-            # Save basic attributes
-            gp_dict["sparse"] = gp.sparse
-            gp_dict["hypercube_rescale"] = gp.hypercube_rescale
-
-            # Save any extra metadata
-            gp_dict["metadata"] = json.dumps(gp.metadata)
-
-            # Save the training error
-            gp_dict["train_err"] = gp.train_err
-
-            for option in store:
-                if option == "x":
-                    gp_dict["x"] = gp.x
-                    gp_dict["y"] = gp.y
-                elif option == "predictor":
-                    gp_dict["predictor"] = gp.predictor
-                else:
-                    assert False
-
-            gps.append(gp_dict)
-
     elif gptype == "gpytorch":
         # initialize likelihood and model
         likelihood = gpytorch.likelihoods.GaussianLikelihood()
@@ -441,31 +357,6 @@ def calc_svd_lbol(tini,tmax,dt, n_coeff = 100, model = "BaKa2016",
                 optimizer.step()
 
             gps.append(model.state_dict())
-    elif gptype == "tensorflow":
-        train_X, val_X, train_y, val_y = train_test_split(param_array_postprocess, cAmat.T, shuffle=True, test_size=0.1, random_state=8581)
-
-        np.random.RandomState(42)
-        model = Sequential()
-        model.add(Dense(train_X.shape[1], activation='relu', kernel_initializer='he_normal', input_shape=(train_X.shape[1],)))
-        model.add(Dense(64, activation='relu', kernel_initializer='he_normal'))
-        model.add(Dense(128, activation='relu', kernel_initializer='he_normal'))
-        model.add(Dense(128, activation='relu', kernel_initializer='he_normal'))
-        model.add(Dense(n_coeff))
-
-        # compile the model
-        model.compile(optimizer='adam', loss='mse')
-
-        # fit the model
-        train_history = model.fit(train_X,
-                                  train_y, epochs=300,
-                                  batch_size=32,
-                                  validation_data=(val_X, val_y),
-                                  verbose=True)
-
-        # evaluate the model
-        error = model.evaluate(param_array_postprocess,
-                               cAmat.T, verbose=0)
-        print("lbol MSE:", error)
 
     svd_model = {}
     svd_model["n_coeff"] = n_coeff
@@ -480,9 +371,6 @@ def calc_svd_lbol(tini,tmax,dt, n_coeff = 100, model = "BaKa2016",
     svd_model["maxs"] = maxs
     svd_model["gps"] = gps
     svd_model["tt"] = tt
-
-    if gptype == "tensorflow":
-        svd_model["model"] = model
 
     print("Finished calculating SVD model of bolometric luminosity...")
 
@@ -529,8 +417,6 @@ def calc_svd_mag(tini,tmax,dt, n_coeff = 100, model = "BaKa2016",
         fileDir = "../output/bulla_reprocess_decimated"
     elif model == "Bu2019nsbh":
         fileDir = "../output/bulla_2Component_lnsbh"
-    elif model == "Bu2021ka":
-        fileDir = "../output/bulla_2Comp_kappas"
     elif model == "Wo2020dyn":
         fileDir = "../output/bulla_rosswog_dynamical"
     elif model == "Wo2020dw":
@@ -548,8 +434,9 @@ def calc_svd_mag(tini,tmax,dt, n_coeff = 100, model = "BaKa2016",
     magkeys = mags.keys()
 
     tt = np.arange(tini,tmax+dt,dt)
-    filters = ["u","g","r","i","z","y","J","H","K"]
+    #filters = ["u","g","r","i","z","y","J","H","K"]
 
+    filters = ["g","r","J"]
     for jj, key in enumerate(magkeys):
         print('Setup %s: %d/%d' % (key, jj, len(magkeys)+1))
         
@@ -594,20 +481,6 @@ def calc_svd_mag(tini,tmax,dt, n_coeff = 100, model = "BaKa2016",
             mags[key]["kappaLR"] = kappaLR
             mags[key]["gammaLR"] = gammaLR
             mags[key]["theta"] = theta
-
-        elif "scalekappa" in key:
-
-            mejdyn = float(keySplit[1].replace("mejdyn",""))
-            mejwind = float(keySplit[2].replace("mejwind",""))
-            phi0 = float(keySplit[3].replace("phi",""))
-            kappa = float(keySplit[4].replace("scalekappa",""))
-            theta = float(keySplit[5])
-
-            mags[key]["mej_dyn"] = mejdyn
-            mags[key]["mej_wind"] = mejwind
-            mags[key]["phi"] = phi0
-            mags[key]["theta"] = theta
-            mags[key]["kappa"] = kappa
 
         elif "nsns" in key:
 
@@ -746,8 +619,6 @@ def calc_svd_mag(tini,tmax,dt, n_coeff = 100, model = "BaKa2016",
             param_array.append([np.log10(mags[key]["mej"]),mags[key]["phi"],mags[key]["theta"]])
         elif model in ["Bu2019lf","Bu2019lr","Bu2019lm"]:
             param_array.append([np.log10(mags[key]["mej_dyn"]),np.log10(mags[key]["mej_wind"]),mags[key]["phi"],mags[key]["theta"]])
-        elif model in ["Bu2021ka"]:
-            param_array.append([np.log10(mags[key]["mej_dyn"]),np.log10(mags[key]["mej_wind"]),mags[key]["phi"],mags[key]["theta"],mags[key]["kappa"]])
         elif model in ["Bu2019nsbh"]:
             param_array.append([np.log10(mags[key]["mej_dyn"]),np.log10(mags[key]["mej_wind"]),mags[key]["theta"]])
         elif model in ["Bu2019lw"]:
@@ -802,7 +673,7 @@ def calc_svd_mag(tini,tmax,dt, n_coeff = 100, model = "BaKa2016",
         cAstd = np.sqrt(cAvar)
 
         nsvds, nparams = param_array_postprocess.shape
-        gps = []
+
         if gptype == "sklearn":
             kernel = 1.0 * RationalQuadratic(length_scale=1.0, alpha=0.1)
             gps = []
@@ -813,65 +684,6 @@ def calc_svd_mag(tini,tmax,dt, n_coeff = 100, model = "BaKa2016",
                                               n_restarts_optimizer=0)
                 gp.fit(param_array_postprocess, cAmat[i,:])
                 gps.append(gp)
-
-                #import pickle
-                #size_estimate = len(pickle.dumps(gp))
-                #gp = GaussianProcessRegressor(kernel=kernel,
-                #                              n_restarts_optimizer=0,
-                #                              copy_X_train=False)
-                #gp.fit(param_array_postprocess, cAmat[i,:])
-                #size_estimate = len(pickle.dumps(gp))
-
-        elif gptype == "gp_api":
-            nd = 1
-            # Construct hyperparamters
-            coeffs = [0.5] * nd
-            whitenoise = 0.5
-
-            # Create the compact kernel
-            k1 = CompactKernel.fit(param_array_postprocess, method="simple", coeffs=coeffs, sparse=True)
-
-            # Create the whitenoise kernel
-            k2 = WhiteNoiseKernel.fit(param_array_postprocess, method = "simple", scale = whitenoise, sparse = True)
-
-            # Add them together
-            kernel = k1 #+ k2
-
-            for i in range(n_coeff):
-                # Fit the training data
-                gp = GaussianProcess.fit(param_array_postprocess, cAmat[i,:], kernel=kernel, train_err=None)
-
-                store = gp.store_options
-
-                gp_dict = {}
-                if gp.param_names is not None:
-                    gp_dict["param_names"] = ",".join(gp.param_names)
-                else:
-                    gp_dict["param_names"] = None
-
-                # Save the kernel
-                gp_dict["kernel"] = gp.kernel.to_json()
-
-                # Save basic attributes
-                gp_dict["sparse"] = gp.sparse
-                gp_dict["hypercube_rescale"] = gp.hypercube_rescale
-
-                # Save any extra metadata
-                gp_dict["metadata"] = json.dumps(gp.metadata)
-
-                # Save the training error
-                gp_dict["train_err"] = gp.train_err
-
-                for option in store:
-                    if option == "x":
-                        gp_dict["x"] = gp.x
-                        gp_dict["y"] = gp.y
-                    elif option == "predictor":
-                        gp_dict["predictor"] = gp.predictor
-                    else:
-                        assert False
-
-                gps.append(gp_dict)
         elif gptype == "gpytorch":
             # initialize likelihood and model
             likelihood = gpytorch.likelihoods.GaussianLikelihood()
@@ -919,32 +731,7 @@ def calc_svd_mag(tini,tmax,dt, n_coeff = 100, model = "BaKa2016",
                     optimizer.step()
 
                 gps.append(model.state_dict())
-        elif gptype == "tensorflow":
-            train_X, val_X, train_y, val_y = train_test_split(param_array_postprocess, cAmat.T, shuffle=True, test_size=0.1, random_state=8581)
-
-            np.random.RandomState(42)
-            model = Sequential()
-            model.add(Dense(train_X.shape[1], activation='relu', kernel_initializer='he_normal', input_shape=(train_X.shape[1],)))
-            model.add(Dense(64, activation='relu', kernel_initializer='he_normal'))
-            model.add(Dense(128, activation='relu', kernel_initializer='he_normal'))
-            model.add(Dense(128, activation='relu', kernel_initializer='he_normal'))
-            model.add(Dense(n_coeff))
-
-            # compile the model
-            model.compile(optimizer='adam', loss='mse')
-
-            # fit the model
-            train_history = model.fit(train_X,
-                                      train_y, epochs=300,
-                                      batch_size=32,
-                                      validation_data=(val_X, val_y),
-                                      verbose=True)
-
-            # evaluate the model
-            error = model.evaluate(param_array_postprocess,
-                                   cAmat.T, verbose=0)
-            print("{filt} MSE:", error)
-
+        
         svd_model[filt] = {}
         svd_model[filt]["n_coeff"] = n_coeff
         svd_model[filt]["param_array"] = param_array
@@ -958,9 +745,24 @@ def calc_svd_mag(tini,tmax,dt, n_coeff = 100, model = "BaKa2016",
         svd_model[filt]["maxs"] = maxs
         svd_model[filt]["gps"] = gps
         svd_model[filt]["tt"] = tt
+        
 
-        if gptype == "tensorflow":
-            svd_model[filt]["model"] = model
+        svd_model_filt = {}
+        svd_model_filt["n_coeff"] = n_coeff
+        svd_model_filt["param_array"] = param_array
+        svd_model_filt["param_array_postprocess"] = param_array_postprocess
+        svd_model_filt["cAmat"] = cAmat
+        svd_model_filt["cAstd"] = cAstd
+        svd_model_filt["VA"] = VA
+        svd_model_filt["param_mins"] = param_mins
+        svd_model_filt["param_maxs"] = param_maxs
+        svd_model_filt["mins"] = mins
+        svd_model_filt["maxs"] = maxs
+        svd_model_filt["gps"] = gps
+        svd_model_filt["tt"] = tt
+
+        with open('%s_%s_mag.pkl'%(model,filt),'wb') as pklfile:
+            pickle.dump(svd_model_filt,pklfile)
     print("Finished calculating SVD model of lightcurve magnitudes...")
 
     return svd_model
@@ -1254,7 +1056,7 @@ def calc_color(tini,tmax,dt,param_list,svd_mag_color_model=None, model = "a2.0")
 
 
 def calc_lc(tini,tmax,dt,param_list,svd_mag_model=None,svd_lbol_model=None,
-            model = "BaKa2016", gptype="sklearn", n_coeff_lim=None,filterlist=None):
+            model = "BaKa2016", gptype="sklearn", n_coeff_lim=None):
 
     tt = np.arange(tini,tmax+dt,dt)
 
@@ -1263,12 +1065,8 @@ def calc_lc(tini,tmax,dt,param_list,svd_mag_model=None,svd_lbol_model=None,
     if svd_lbol_model == None:
         svd_lbol_model = calc_svd_lbol(tini,tmax,dt,model=model)
 
-    if filterlist==None:
-        #filters = ["u","g","r","i","z","y","J","H","K"]
-        filters = ["g","r","J"]
-    else:
-        filters = filterlist
-    print('Using filters',filters)
+    #filters = ["u","g","r","i","z","y","J","H","K"]
+    filters = ["g"]#,"r","J"]
     mAB = np.zeros((9,len(tt)))
     for jj,filt in enumerate(filters):
         print('Doing filter',filt)
@@ -1294,45 +1092,34 @@ def calc_lc(tini,tmax,dt,param_list,svd_mag_model=None,svd_lbol_model=None,
         for i in range(len(param_mins)):
             param_list_postprocess[i] = (param_list_postprocess[i]-param_mins[i])/(param_maxs[i]-param_mins[i])
 
-        if gptype == "tensorflow":
-            model = svd_mag_model[filt]["model"]
-            cAproj = model.predict(np.atleast_2d(param_list_postprocess)).T.flatten()
-            cAstd = np.ones((n_coeff,))
-        else:
-            cAproj = np.zeros((n_coeff,))
-            cAstd = np.zeros((n_coeff,))
-            for i in range(n_coeff):
-                gp = gps[i]
-                if gptype == "sklearn":
-                    y_pred, sigma2_pred = gp.predict(np.atleast_2d(param_list_postprocess), return_std=True)
-                    cAproj[i] = y_pred
-                    cAstd[i] = sigma2_pred
-                elif gptype == "gp_api":
-                    y_pred = gp.mean(np.atleast_2d(param_list_postprocess))
+        cAproj = np.zeros((n_coeff,))
+        cAstd = np.zeros((n_coeff,))
+        for i in range(n_coeff):
+            gp = gps[i]
+            print('Doing',i,n_coeff)
+            if gptype == "sklearn":
+                y_pred, sigma2_pred = gp.predict(np.atleast_2d(param_list_postprocess), return_std=True)
+                cAproj[i] = y_pred
+                cAstd[i] = sigma2_pred
 
-                    y_samples_test = gp.rvs(100, np.atleast_2d(param_list_postprocess), random_state=random_state)
-                    y_90_lo_test, y_90_hi_test = np.percentile(y_samples_test, [5, 95], axis=1)
+            elif gptype == "gpytorch":
+                likelihood = gpytorch.likelihoods.GaussianLikelihood()
+                model = ExactGPModel(torch.from_numpy(param_array_postprocess).float(),
+                                     torch.from_numpy(cAmat[i,:]).float(), likelihood)
+                model.load_state_dict(gp)
 
-                    cAproj[i] = y_pred
-                    cAstd[i] = y_90_hi_test - y_90_lo_test
-                elif gptype == "gpytorch":
-                    likelihood = gpytorch.likelihoods.GaussianLikelihood()
-                    model = ExactGPModel(torch.from_numpy(param_array_postprocess).float(),
-                                         torch.from_numpy(cAmat[i,:]).float(), likelihood)
-                    model.load_state_dict(gp)
+                # Get into evaluation (predictive posterior) mode
+                model.eval()
+                likelihood.eval()
 
-                    # Get into evaluation (predictive posterior) mode
-                    model.eval()
-                    likelihood.eval()
+                f_preds = model(torch.from_numpy(np.atleast_2d(param_list_postprocess)).float())
+                y_preds = likelihood(model(torch.from_numpy(np.atleast_2d(param_list_postprocess)).float()))
+                f_mean = f_preds.mean
+                f_var = f_preds.variance
+                f_covar = f_preds.covariance_matrix               
 
-                    f_preds = model(torch.from_numpy(np.atleast_2d(param_list_postprocess)).float())
-                    y_preds = likelihood(model(torch.from_numpy(np.atleast_2d(param_list_postprocess)).float()))
-                    f_mean = f_preds.mean
-                    f_var = f_preds.variance
-                    f_covar = f_preds.covariance_matrix
-
-                    cAproj[i] = f_mean
-                    cAstd[i] = f_var
+                cAproj[i] = f_mean
+                cAstd[i] = f_var
 
         coverrors = np.dot(VA[:,:n_coeff],np.dot(np.power(np.diag(cAstd[:n_coeff]),2),VA[:,:n_coeff].T))
         errors = np.diag(coverrors)
@@ -1368,43 +1155,31 @@ def calc_lc(tini,tmax,dt,param_list,svd_mag_model=None,svd_lbol_model=None,
     for i in range(len(param_mins)):
         param_list_postprocess[i] = (param_list_postprocess[i]-param_mins[i])/(param_maxs[i]-param_mins[i])
 
-    if gptype == "tensorflow":
-        model = svd_lbol_model["model"]
-        cAproj = model.predict(np.atleast_2d(param_list_postprocess)).T.flatten()
-    else:
-        cAproj = np.zeros((n_coeff,))
-        for i in range(n_coeff):
-            gp = gps[i]
-            if gptype == "sklearn":
-                y_pred, sigma2_pred = gp.predict(np.atleast_2d(param_list_postprocess), return_std=True)
-                cAproj[i] = y_pred
-            elif gptype == "gp_api":
-                y_pred = gp.mean(np.atleast_2d(param_list_postprocess))
+    cAproj = np.zeros((n_coeff,))
+    for i in range(n_coeff):
+        print('Now doing',i,n_coeff)
+        gp = gps[i]
+        if gptype == "sklearn":
+            y_pred, sigma2_pred = gp.predict(np.atleast_2d(param_list_postprocess), return_std=True)
+            cAproj[i] = y_pred
+        elif gptype == "gpytorch":
+            likelihood = gpytorch.likelihoods.GaussianLikelihood()
+            model = ExactGPModel(torch.from_numpy(param_array_postprocess).float(),
+                                 torch.from_numpy(cAmat[i,:]).float(), likelihood)
+            model.load_state_dict(gp)
 
-                y_samples_test = gp.rvs(100, np.atleast_2d(param_list_postprocess), random_state=random_state)
-                y_90_lo_test, y_90_hi_test = np.percentile(y_samples_test, [5, 95], axis=1)
+            # Get into evaluation (predictive posterior) mode
+            model.eval()
+            likelihood.eval()
 
-                cAproj[i] = y_pred
-                cAstd[i] = y_90_hi_test - y_90_lo_test
-            elif gptype == "gpytorch":
-                likelihood = gpytorch.likelihoods.GaussianLikelihood()
-                model = ExactGPModel(torch.from_numpy(param_array_postprocess).float(),
-                                     torch.from_numpy(cAmat[i,:]).float(), likelihood)
-                model.load_state_dict(gp)
+            f_preds = model(torch.from_numpy(np.atleast_2d(param_list_postprocess)).float())
+            y_preds = likelihood(model(torch.from_numpy(np.atleast_2d(param_list_postprocess)).float()))
+            f_mean = f_preds.mean
+            f_var = f_preds.variance
+            f_covar = f_preds.covariance_matrix
 
-                # Get into evaluation (predictive posterior) mode
-                model.eval()
-                likelihood.eval()
-
-                f_preds = model(torch.from_numpy(np.atleast_2d(param_list_postprocess)).float())
-                y_preds = likelihood(model(torch.from_numpy(np.atleast_2d(param_list_postprocess)).float()))
-                f_mean = f_preds.mean
-                f_var = f_preds.variance
-                f_covar = f_preds.covariance_matrix
-
-                cAproj[i] = f_mean
-                cAstd[i] = f_var
-
+            cAproj[i] = f_mean
+            cAstd[i] = f_var
     print('Done with second iteration of sklearn')
     lbol_back = np.dot(VA[:,:n_coeff],cAproj)
     lbol_back = lbol_back*(maxs-mins)+mins
@@ -1487,37 +1262,3 @@ def calc_spectra(tini,tmax,dt,lambdaini,lambdamax,dlambda,param_list,svd_spec_mo
 
     return np.squeeze(tt), np.squeeze(lambdas), spec
 
-def load_gpapi(gp):
-
-    from gp_api.kernels import from_json as load_kernel
-
-    param_names = gp.get("param_names", None)
-    if param_names is not None:
-        param_names = param_names.split(",")
-
-    sparse = gp["sparse"]
-    hypercube_rescale = gp["hypercube_rescale"]
-
-    metadata = json.loads(gp["metadata"])
-
-    ## TODO: actually figure out what can be loaded and what has to
-    ## be re-computed
-
-    x = gp["x"]
-    y = gp["y"]
-
-    train_err = gp["train_err"]
-
-    kernel = load_kernel(gp["kernel"])
-    if train_err is not None:
-        Kaa = kernel(x, x, train_err)
-    else:
-        Kaa = kernel(x, x)
-    LL = GaussianProcess._get_cholesky(Kaa, sparse=sparse)
-
-    predictor = gp["predictor"]
-
-    return GaussianProcess(x, y, LL, predictor, kernel,
-                           hypercube_rescale=hypercube_rescale,
-                           param_names=param_names,
-                           metadata=metadata)

@@ -42,6 +42,11 @@ def get_Bu2019lm_model(table, **kwargs):
     else:
         doSpec = False
 
+    if 'filterlist' in kwargs:
+        filterlist = kwargs['filterlist']
+    else:
+        filterlist = None
+
     if not 'n_coeff' in table.colnames:
         if doAB:
             #table['n_coeff'] = 43
@@ -51,6 +56,9 @@ def get_Bu2019lm_model(table, **kwargs):
 
     if not 'gptype' in table.colnames:
         table['gptype'] = 'sklearn'
+
+    print(table['n_coeff'])
+    print(filterlist)
 
     if doAB:
         if not Global.svd_mag_model == 0:
@@ -64,19 +72,20 @@ def get_Bu2019lm_model(table, **kwargs):
                 modelfile = os.path.join(ModelPath,'Bu2019lm_mag_gpapi.pkl')
             elif np.all(table['gptype'] == "tensorflow"):
                 modelfile = os.path.join(ModelPath,'Bu2019lm_mag_tf.pkl')
+
             if LoadModel:
             #if True:
+                modelfile = os.path.join(ModelPath,'Bu2019lm_mag.pkl')
                 with open(modelfile, 'rb') as handle:
                     svd_mag_model = pickle.load(handle)
-
                 if np.all(table['gptype'] == "tensorflow"):
                     outdir = modelfile.replace(".pkl","")
                     for filt in svd_mag_model.keys():
                         outfile = os.path.join(outdir, f'{filt}.h5')
                         svd_mag_model[filt]['model'] = load_model(outfile)
-
             else:
                 svd_mag_model = svd_utils.calc_svd_mag(table['tini'][0], table['tmax'][0], table['dt'][0], model = "Bu2019lm", n_coeff = table['n_coeff'][0], gptype=table['gptype'])
+                modelfile = os.path.join(ModelPath, 'Bu2019lm_mag.pkl')
 
                 if np.all(table['gptype'] == "tensorflow"):
                     outdir = modelfile.replace(".pkl","")
@@ -112,17 +121,16 @@ def get_Bu2019lm_model(table, **kwargs):
                 modelfile = os.path.join(ModelPath,'Bu2019lm_lbol_gpapi.pkl')
             elif np.all(table['gptype'] == "tensorflow"):
                 modelfile = os.path.join(ModelPath,'Bu2019lm_lbol_tf.pkl')
+
             if LoadModel:
             #if True:
-
+                modelfile = os.path.join(ModelPath,'Bu2019lm_lbol.pkl')
                 with open(modelfile, 'rb') as handle:
                     svd_lbol_model = pickle.load(handle)
-
                 if np.all(table['gptype'] == "tensorflow"):
-                    outdir = modelfile.replace(".pkl","")
+                    outdir = modelfile.replace(".pkl", "")
                     outfile = os.path.join(outdir, 'model.h5')
                     svd_lbol_model['model'] = load_model(outfile)
- 
             else:
                 svd_lbol_model = svd_utils.calc_svd_lbol(table['tini'][0], table['tmax'][0], table['dt'][0], model = "Bu2019lm", n_coeff = table['n_coeff'][0], gptype=table['gptype'])
 
@@ -133,10 +141,9 @@ def get_Bu2019lm_model(table, **kwargs):
                     outfile = os.path.join(outdir, 'model.h5')
                     svd_lbol_model['model'].save(outfile)
                     del svd_lbol_model['model']
-
+                # modelfile = os.path.join(ModelPath,'Bu2019lm_lbol.pkl')
                 with open(modelfile, 'wb') as handle:
                     pickle.dump(svd_lbol_model, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
                 if np.all(table['gptype'] == "tensorflow"):
                     svd_lbol_model['model'] = load_model(outfile)
 
@@ -189,11 +196,11 @@ def get_Bu2019lm_model(table, **kwargs):
 
     # calc lightcurve for each sample
     for isample in range(len(table)):
-        print(np.log10(table['mej_dyn'][isample]),np.log10(table['mej_wind'][isample]),table['phi'][isample],table['theta'][isample])
-
         print('Generating sample %d/%d' % (isample, len(table)))
+        print(np.log10(table['mej_dyn'][isample]), np.log10(table['mej_wind'][isample]), table['phi'][isample],
+              table['theta'][isample])
         if doAB:
-            table['t'][isample], table['lbol'][isample], table['mag'][isample] = svd_utils.calc_lc(table['tini'][isample], table['tmax'][isample],table['dt'][isample], [np.log10(table['mej_dyn'][isample]),np.log10(table['mej_wind'][isample]),table['phi'][isample],table['theta'][isample]],svd_mag_model = svd_mag_model, svd_lbol_model = svd_lbol_model, model = "Bu2019lm", gptype=table['gptype'][0])
+            table['t'][isample], table['lbol'][isample], table['mag'][isample] = svd_utils.calc_lc(table['tini'][isample], table['tmax'][isample],table['dt'][isample], [np.log10(table['mej_dyn'][isample]),np.log10(table['mej_wind'][isample]),table['phi'][isample],table['theta'][isample]],svd_mag_model = svd_mag_model, svd_lbol_model = svd_lbol_model, model = "Bu2019lm",filterlist=filterlist,gptype=table['gptype'][0])
         elif doSpec:
             table['t'][isample], table['lambda'][isample], table['spec'][isample] = svd_utils.calc_spectra(table['tini'][isample], table['tmax'][isample],table['dt'][isample], table['lambdaini'][isample], table['lambdamax'][isample]+table['dlambda'][isample], table['dlambda'][isample], [np.log10(table['mej_dyn'][isample]),np.log10(table['mej_wind'][isample]),table['phi'][isample],table['theta'][isample]],svd_spec_model = svd_spec_model, model = "Bu2019lm")
 
