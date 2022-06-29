@@ -307,9 +307,10 @@ class KNTable(Table):
             samples_out = samples_out['lalinference']
 
             data_out = Table(samples_out)
-            data_out['q'] = data_out['m1'] / data_out['m2']
-            data_out['mchirp'] = (data_out['m1'] * data_out['m2'])**(3./5.) / (data_out['m1'] + data_out['m2'])**(1./5.)
-            
+            data_out['q'] = data_out['m1_source'] / data_out['m2_source']
+            data_out['mchirp'] = (data_out['m1_source'] * data_out['m2_source']) ** (3. / 5.) / (
+                        data_out['m1_source'] + data_out['m2_source']) ** (1. / 5.)
+
             data_out['theta'] = data_out['iota']
             idx = np.where(data_out['theta'] > 90.)[0]
             data_out['theta'][idx] = 180 - data_out['theta'][idx]
@@ -712,7 +713,7 @@ class KNTable(Table):
             if (self['c2'] < 0.).any():
                 print("Warning: Returned compactnesses < 0 ... setting = 0.")
                 self['c2'][self['c2'] < 0.0] = 0.0
-            return self
+        return self
 
 
 

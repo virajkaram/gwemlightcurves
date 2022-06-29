@@ -5,7 +5,7 @@
 import numpy as np
 import scipy
 
-def calc_meje(m1,c1,m2,c2):
+def calc_meje(m1,c1,m2,c2, split_mej=False):
     """
 .. py:function:: calc_meje(m1,mb1,c1,m2,mb2,c2)
 
@@ -84,7 +84,10 @@ def calc_meje(m1,c1,m2,c2):
 
     meje_fit = meje_dynamical_fit + meje_wind_fit
 
-    return meje_fit
+    if split_mej:
+        return meje_fit, meje_dynamical_fit, meje_wind_fit
+    else:
+        return meje_fit
 
 def calc_vej(m1,c1,m2,c2):
     """
