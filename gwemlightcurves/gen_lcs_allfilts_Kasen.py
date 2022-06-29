@@ -1,5 +1,5 @@
 import os
-os.environ['PATH'] = '/Users/viraj/gwemlightcurves/input/Monica'
+os.environ['PATH'] = '../input/Monica'
 
 from gwemlightcurves.KNModels import KNTable
 import pickle
@@ -93,7 +93,7 @@ def calc_vej(m1,c1,m2,c2):
     return a*(m1/m2)*(1+c*c1) + a*(m2/m1)*(1+c*c2)+b
 
 
-t = KNTable.read_samples('input/bns_samples_realistic.dat',Nsamples=200)
+t = KNTable.read_samples('../input/bns_samples_realistic.dat',Nsamples=200)
 t = t.calc_radius(EOS='ap4', TOV='Monica', polytrope=True)
 t = t.calc_compactness()
 t = t.calc_baryonic_mass(EOS='ap4',TOV='Monica')
@@ -106,10 +106,10 @@ t['vej'] = calc_vej(t['m1'],t['c1'],t['m2'],t['c2'])
 t['tini'] = 0.1; t['dt']=0.1;t['tmax']=15
 
 
-Xlans = [1e-5,3e-5,6e-5,1e-4] #From Andreoni et al. 2020
+Xlans = [1e-5,3e-5,6e-5,1e-4] #Similar to Andreoni et al. 2021
 for Xlan in Xlans:
     print('Currently doing lanthanide fraction',Xlan)
     t['Xlan'] = Xlan
-    model_table = KNTable.model('Ka2017',t,LoadModel=True,ModelPath='output/svdmodels/')
+    model_table = KNTable.model('Ka2017',t,LoadModel=True,ModelPath='../output/svdmodels/')
 
-    pickle.dump(model_table,open('output/bns_samples_realistic_ejecta_masses_Ka2017_Xlan%s.dat'%(Xlan),'wb'))
+    pickle.dump(model_table,open('../output/bns_samples_realistic_ejecta_masses_Ka2017_Xlan%s.dat'%(Xlan),'wb'))

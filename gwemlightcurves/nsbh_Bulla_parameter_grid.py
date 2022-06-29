@@ -5,8 +5,8 @@ from astropy.table import Column
 
 #Mej_dyn = np.linspace(0.001,0.02,10)
 #Mej_wind = np.linspace(0.01,0.13,10)
-Mej_dyn = np.linspace(0.065,0.13,15)
-Mej_wind = np.linspace(0.065,0.13,15)
+Mej_dyn = np.linspace(0.01,0.09,10)
+Mej_wind = np.linspace(0.01,0.09,10)
 
 phis = np.array([10,30,45,60,75,90])#np.linspace(30,60,5)
 costhetas = np.linspace(0,1,5)
@@ -39,4 +39,4 @@ t.add_column(Column(name='m1',data=m1))
 t.add_column(Column(name='m2',data=m2))
 t.add_column(Column(name='q',data=q))
 
-t.write('../input/bns_ejecta_parameters_Andreoni_large_ranges3.csv',overwrite=True)
+t.write('../output/nsbh_ejecta_parameters_Andreoni.csv',overwrite=True)
