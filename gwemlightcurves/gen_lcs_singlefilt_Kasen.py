@@ -4,7 +4,7 @@ import numpy as np
 from gwemlightcurves.EjectaFits.BNS_fits import calc_meje_dyn, calc_meje_wind, calc_vej
 
 
-t = KNTable.read_samples('input/bns_samples_realistic.dat',Nsamples=200)
+t = KNTable.read_samples('../input/bns_samples_realistic.dat',Nsamples=200)
 t = t.calc_radius(EOS='ap4', TOV='Monica', polytrope=True)
 t = t.calc_compactness()
 t = t.calc_baryonic_mass(EOS='ap4',TOV='Monica')
@@ -22,6 +22,6 @@ filt = 'g'
 for Xlan in Xlans:
     print('Currently doing lanthanide fraction',Xlan)
     t['Xlan'] = Xlan
-    model_table1 = KNTable.model('Ka2017',t,LoadModel=True,ModelPath='output/svdmodels/',filterlist=[filt])
+    model_table1 = KNTable.model('Ka2017',t,LoadModel=True,ModelPath='../output/svdmodels/',filterlist=[filt])
 
-    pickle.dump(model_table1,open('output/bns_samples_realistic_ejecta_masses_Ka2017_%sband_Xlan%s.dat'%(filt,theta),'wb'))
+    pickle.dump(model_table1,open('../output/bns_samples_realistic_ejecta_masses_Ka2017_%sband_Xlan%s.dat'%(filt,theta),'wb'))
